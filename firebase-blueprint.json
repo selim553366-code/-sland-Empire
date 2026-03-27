@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A player in the game.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "activeIslandId": { "type": "string" },
+        "allianceId": { "type": "string" }
+      },
+      "required": ["uid", "username", "email"]
+    },
+    "Island": {
+      "title": "Island",
+      "description": "A player's island empire.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "gold": { "type": "number" },
+            "food": { "type": "number" },
+            "wood": { "type": "number" },
+            "stone": { "type": "number" },
+            "oil": { "type": "number" },
+            "fruits": { "type": "number" },
+            "electronics": { "type": "number" }
+          }
+        },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "population": { "type": "number" },
+            "maxPopulation": { "type": "number" },
+            "happiness": { "type": "number" },
+            "taxRate": { "type": "number" },
+            "techPoints": { "type": "number" },
+            "techLevel": { "type": "number" },
+            "missileCount": { "type": "number" }
+          }
+        },
+        "buildings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "progress": { "type": "number" }
+            }
+          }
+        },
+        "creatures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "type": "string" },
+              "role": { "type": "string" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "health": { "type": "number" }
+            }
+          }
+        },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["id", "ownerId", "resources", "stats"]
+    },
+    "Alliance": {
+      "title": "Alliance",
+      "description": "A group of players working together.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "bonuses": { "type": "object" }
+      },
+      "required": ["id", "name", "members"]
+    },
+    "Trade": {
+      "title": "Trade",
+      "description": "A resource trade between players.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromId": { "type": "string" },
+        "toId": { "type": "string" },
+        "offer": { "type": "object" },
+        "request": { "type": "object" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
+      },
+      "required": ["id", "fromId", "toId", "offer", "request", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles." },
+    "/islands/{islandId}": { "schema": "Island", "description": "Island states." },
+    "/alliances/{allianceId}": { "schema": "Alliance", "description": "Alliance groups." },
+    "/trades/{tradeId}": { "schema": "Trade", "description": "Trade requests." }
+  }
+}
