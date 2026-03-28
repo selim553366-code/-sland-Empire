@@ -1,5 +1,5 @@
 export interface Resources {
-  gold: number;
+  euro: number;
   food: number;
   wood: number;
   stone: number;
@@ -8,9 +8,11 @@ export interface Resources {
   electronics: number;
 }
 
-export type CurrencyType = 'Gold' | 'Credits' | 'Energy' | 'Quantum';
+export type CurrencyType = 'Euro' | 'Credits' | 'Energy' | 'Quantum';
 export type CrisisType = 'None' | 'Hyperinflation' | 'Market Crash' | 'Famine' | 'Plague' | 'Golden Age';
 export type Ideology = 'Neutral' | 'Capitalist' | 'Socialist' | 'Technocratic' | 'Expansionist';
+
+export type WorkStatus = 'working' | 'resting';
 
 export interface IslandStats {
   population: number;
@@ -25,27 +27,32 @@ export interface IslandStats {
   activeCrisis: CrisisType;
   crisisDuration: number;
   gdp: number; // Gross Domestic Product simulation
+  workStatus: WorkStatus;
 }
 
 export interface Creature {
   id: string;
   type: 'human' | 'beast' | 'robot' | 'cyborg' | 'spirit' | 'alien';
-  role: 'worker' | 'soldier' | 'scientist' | 'farmer' | 'politician' | 'artist';
+  role: 'worker' | 'soldier' | 'scientist' | 'farmer' | 'politician' | 'artist' | 'miner';
   x: number;
   y: number;
   targetX?: number;
   targetY?: number;
   health: number;
   state: 'idle' | 'moving' | 'working';
+  weapon?: 'none' | 'sword' | 'rifle' | 'laser';
+  speed?: number;
 }
 
 export interface Building {
   id: string;
-  type: 'house' | 'farm' | 'mine' | 'storage' | 'lab' | 'oil_rig' | 'missile_silo' | 'factory' | 'university' | 'hospital' | 'bank';
+  type: 'house' | 'farm' | 'mine' | 'storage' | 'lab' | 'oil_rig' | 'missile_silo' | 'factory' | 'university' | 'hospital' | 'bank' | 'navy_base';
   x: number;
   y: number;
   progress: number;
   level: number; // Building specific level for evolution
+  health: number;
+  maxHealth: number;
 }
 
 export interface Ship {
@@ -56,7 +63,25 @@ export interface Ship {
   targetX?: number;
   targetY?: number;
   cargo: Partial<Resources>;
-  status: 'idle' | 'sailing' | 'trading' | 'exploring';
+  status: 'idle' | 'sailing' | 'trading' | 'exploring' | 'attacking';
+  health: number;
+  maxHealth: number;
+  attackPower: number;
+  weaponType: 'cannon' | 'missile' | 'torpedo' | 'none';
+  targetId?: string; // ID of ship or building being attacked
+  targetType?: 'ship' | 'building' | 'island';
+}
+
+export interface Tree {
+  id: string;
+  x: number;
+  y: number;
+  type: 'pine' | 'oak' | 'palm';
+}
+
+export interface Diplomacy {
+  targetIslandId: string;
+  status: 'neutral' | 'war' | 'alliance' | 'trade_agreement';
 }
 
 export interface Island {
@@ -70,8 +95,10 @@ export interface Island {
   creatures: Creature[];
   ships: Ship[];
   recentEvents: any[];
+  trees: Tree[];
   discoveredIslandIds: string[];
   lastUpdated: number;
+  diplomacy: Diplomacy[];
 }
 
 export interface UserProfile {

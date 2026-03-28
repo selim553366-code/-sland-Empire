@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
-import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc, collection, query, where, arrayUnion } from 'firebase/firestore';
 import { Scene } from './components/Game/Scene';
 import { HUD } from './components/UI/HUD';
 import { WorldMap } from './components/UI/WorldMap';
-import { Island, UserProfile, Resources, Building, Creature, Ship } from './types';
+import { Login } from './components/UI/Login';
+import { Island, UserProfile, Resources, Building, Creature, Ship, Diplomacy } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, Loader2, Trophy, Shield, Swords, Utensils, Heart } from 'lucide-react';
 
 const INITIAL_RESOURCES: Resources = {
-  gold: 500,
+  euro: 500,
   food: 200,
   wood: 200,
   stone: 100,
@@ -48,18 +49,26 @@ export default function App() {
           techPoints: 500,
           techLevel: 3,
           missileCount: 0,
-          currencyType: 'Gold',
+          currencyType: 'Euro',
           ideology: 'Neutral',
           activeCrisis: 'None',
           crisisDuration: 0,
-          gdp: 500
+          gdp: 500,
+          workStatus: 'working'
         },
         buildings: [],
         creatures: [],
         ships: [],
         recentEvents: [],
+        trees: Array.from({ length: 15 }).map((_, j) => ({
+          id: `npc-${i}-tree-${j}`,
+          x: (Math.random() - 0.5) * 28,
+          y: (Math.random() - 0.5) * 28,
+          type: ['pine', 'oak', 'palm'][Math.floor(Math.random() * 3)] as any
+        })),
         discoveredIslandIds: [],
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
+        diplomacy: []
       });
     }
     setNpcIslands(npcs);
@@ -82,18 +91,31 @@ export default function App() {
             techPoints: 0,
             techLevel: 1,
             missileCount: 0,
-            currencyType: 'Gold',
+            currencyType: 'Euro',
             ideology: 'Neutral',
             activeCrisis: 'None',
             crisisDuration: 0,
-            gdp: 100
+            gdp: 100,
+            workStatus: 'working'
           };
         }
-        if (!data.stats.currencyType) data.stats.currencyType = 'Gold';
+        if (!data.stats.currencyType) data.stats.currencyType = 'Euro';
         if (!data.stats.ideology) data.stats.ideology = 'Neutral';
         if (!data.stats.activeCrisis) data.stats.activeCrisis = 'None';
         if (!data.stats.crisisDuration) data.stats.crisisDuration = 0;
         if (!data.stats.gdp) data.stats.gdp = 100;
+        data.buildings = (data.buildings || []).map(b => ({
+          ...b,
+          health: b.health ?? 500,
+          maxHealth: b.maxHealth ?? 500
+        }));
+        data.ships = (data.ships || []).map(s => ({
+          ...s,
+          health: s.health ?? (s.type === 'warship' ? 1000 : 500),
+          maxHealth: s.maxHealth ?? (s.type === 'warship' ? 1000 : 500),
+          attackPower: s.attackPower ?? (s.type === 'warship' ? 50 : 0),
+          weaponType: s.weaponType ?? (s.type === 'warship' ? 'cannon' : 'none')
+        }));
         return data;
       });
       setOtherIslands(islands);
@@ -136,12 +158,14 @@ export default function App() {
               techPoints: 0,
               techLevel: 1,
               missileCount: 0,
-              currencyType: 'Gold',
+              currencyType: 'Euro',
               ideology: 'Neutral',
               activeCrisis: 'None',
               crisisDuration: 0,
-              gdp: 100
+              gdp: 100,
+              workStatus: 'working'
             },
+            diplomacy: [],
             buildings: [],
             creatures: [
               { id: 'c1', type: 'human', role: 'worker', x: 0, y: 0, health: 100, state: 'idle' },
@@ -152,6 +176,12 @@ export default function App() {
             ],
             ships: [],
             recentEvents: [],
+            trees: Array.from({ length: 20 }).map((_, i) => ({
+              id: `tree-${i}`,
+              x: (Math.random() - 0.5) * 28,
+              y: (Math.random() - 0.5) * 28,
+              type: ['pine', 'oak', 'palm'][Math.floor(Math.random() * 3)] as any
+            })),
             discoveredIslandIds: [u.uid],
             lastUpdated: Date.now(),
           };
@@ -177,14 +207,15 @@ export default function App() {
             techPoints: 0,
             techLevel: 1,
             missileCount: 0,
-            currencyType: 'Gold',
+            currencyType: 'Euro',
             ideology: 'Neutral',
             activeCrisis: 'None',
             crisisDuration: 0,
-            gdp: 100
+            gdp: 100,
+            workStatus: 'working'
           };
         }
-        if (!data.stats.currencyType) data.stats.currencyType = 'Gold';
+        if (!data.stats.currencyType) data.stats.currencyType = 'Euro';
         if (!data.stats.ideology) data.stats.ideology = 'Neutral';
         if (!data.stats.activeCrisis) data.stats.activeCrisis = 'None';
         if (!data.stats.crisisDuration) data.stats.crisisDuration = 0;
@@ -227,7 +258,7 @@ export default function App() {
       if (stats.techLevel >= 12) stats.currencyType = 'Quantum';
       else if (stats.techLevel >= 8) stats.currencyType = 'Energy';
       else if (stats.techLevel >= 4) stats.currencyType = 'Credits';
-      else stats.currencyType = 'Gold';
+      else stats.currencyType = 'Euro';
 
       // Crisis Management
       if (stats.activeCrisis !== 'None') {
@@ -284,7 +315,7 @@ export default function App() {
       const efficiency = (stats.population / 10) * (stats.happiness / 100) * incomeMultiplier;
       
       const baseIncome = {
-        gold: stats.population * (stats.taxRate / 100) * 0.2 * incomeMultiplier,
+        euro: stats.population * (stats.taxRate / 100) * 0.2 * incomeMultiplier,
         food: 0.2,
         wood: 0.2,
         stone: 0.1,
@@ -300,21 +331,33 @@ export default function App() {
         if (b.progress >= 100) {
           if (b.type === 'farm') baseIncome.food += 2 * efficiency;
           if (b.type === 'mine') baseIncome.stone += 1 * efficiency;
-          if (b.type === 'storage') baseIncome.gold += 1 * efficiency;
+          if (b.type === 'storage') baseIncome.euro += 1 * efficiency;
           if (b.type === 'lab') baseIncome.tech += 1 * efficiency;
           if (b.type === 'oil_rig') baseIncome.oil += 0.5 * efficiency;
-          if (b.type === 'factory') baseIncome.electronics += 0.3 * efficiency;
-          if (b.type === 'bank') baseIncome.gold += 5 * efficiency;
+          if (b.type === 'factory') {
+            const scientistCount = creatures.filter(c => c.role === 'scientist').length;
+            baseIncome.electronics += (0.3 + (scientistCount * 0.1)) * efficiency;
+          }
+          if (b.type === 'bank') baseIncome.euro += 5 * efficiency;
           if (b.type === 'university') baseIncome.tech += 2 * efficiency;
           if (b.type === 'hospital') stats.happiness += 0.1;
           
           if (b.type === 'house') {
             stats.maxPopulation = 20 + (buildings.filter(x => x.type === 'house' && x.progress >= 100).length * 15);
           }
+          if (b.type === 'missile_silo') {
+            if (Math.random() < 0.1) stats.missileCount += 1;
+          }
+          if (b.type === 'navy_base') {
+            // Navy base could provide some defensive bonus or ship repair
+            ships.forEach(s => {
+              if (s.health < s.maxHealth) s.health = Math.min(s.maxHealth, s.health + 5);
+            });
+          }
         }
       });
 
-      resources.gold += baseIncome.gold;
+      resources.euro += baseIncome.euro;
       resources.food += baseIncome.food;
       resources.wood += baseIncome.wood;
       resources.stone += baseIncome.stone;
@@ -329,14 +372,16 @@ export default function App() {
       }
 
       // 6. Creature AI & Movement
-      let miningGoldBonus = 0;
+      let miningEuroBonus = 0;
       const newEvents: any[] = [];
       const newCreatures = [...creatures];
       
-      // Spawn new creatures if population grows
+      // Spawn or remove creatures to match population
       const targetCreatureCount = Math.min(20, Math.floor(stats.population / 2));
+      
+      // Spawn new creatures
       if (newCreatures.length < targetCreatureCount) {
-        const roles: Creature['role'][] = ['worker', 'farmer', 'scientist', 'artist', 'politician'];
+        const roles: Creature['role'][] = ['worker', 'farmer', 'scientist', 'artist', 'politician', 'miner'];
         const types: Creature['type'][] = ['human', 'robot', 'cyborg'];
         newCreatures.push({
           id: Math.random().toString(36).substr(2, 9),
@@ -345,8 +390,18 @@ export default function App() {
           x: (Math.random() - 0.5) * 10,
           y: (Math.random() - 0.5) * 10,
           health: 100,
+          speed: 1 + Math.random() * 0.5,
           state: 'idle'
         });
+      }
+      // Remove creatures if population decreased
+      else if (newCreatures.length > targetCreatureCount) {
+        newCreatures.pop();
+      }
+
+      // Population growth
+      if (stats.population < stats.maxPopulation && Math.random() < 0.05) {
+        stats.population += 1;
       }
 
       const updatedCreatures = newCreatures.map(c => {
@@ -354,6 +409,8 @@ export default function App() {
         
         if (creature.state === 'idle' || !creature.targetX) {
           const relevantBuildings = buildings.filter(b => {
+            if (stats.workStatus === 'resting') return b.type === 'house';
+            
             if (creature.role === 'farmer') return b.type === 'farm';
             if (creature.role === 'scientist') return b.type === 'lab' || b.type === 'university';
             if (creature.role === 'worker') return b.type === 'mine' || b.type === 'factory' || b.type === 'storage';
@@ -362,10 +419,10 @@ export default function App() {
             return true;
           });
 
-          if (relevantBuildings.length > 0) {
+          if (relevantBuildings.length > 0 && Math.random() > 0.3) {
             const target = relevantBuildings[Math.floor(Math.random() * relevantBuildings.length)];
-            creature.targetX = target.x + (Math.random() - 0.5) * 3;
-            creature.targetY = target.y + (Math.random() - 0.5) * 3;
+            creature.targetX = target.x + (Math.random() - 0.5) * 5;
+            creature.targetY = target.y + (Math.random() - 0.5) * 5;
             creature.state = 'moving';
           } else {
             creature.targetX = (Math.random() - 0.5) * 25;
@@ -379,17 +436,17 @@ export default function App() {
           const dy = creature.targetY - creature.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           
-          if (dist < 1) {
+          if (dist < 1.5) { // Increased distance threshold to prevent getting stuck
             creature.state = 'working';
           } else {
-            // Sync current position occasionally but let client handle smooth movement
-            creature.x += (dx / dist) * 1.5;
-            creature.y += (dy / dist) * 1.5;
+            // Reduced random jitter to improve movement stability
+            creature.x += (dx / dist) * (creature.speed || 1.5) + (Math.random() - 0.5) * 0.05;
+            creature.y += (dy / dist) * (creature.speed || 1.5) + (Math.random() - 0.5) * 0.05;
           }
         }
 
         if (creature.state === 'working') {
-          // Check if working at a mine to find gold
+          // Check if working at a mine to find euro
           const nearMine = buildings.find(b => 
             b.type === 'mine' && 
             b.progress >= 100 &&
@@ -397,15 +454,20 @@ export default function App() {
           );
           
           if (nearMine && Math.random() < 0.2) {
-            miningGoldBonus += 15; // Found some gold!
+            miningEuroBonus += 15; // Found some euro!
             newEvents.push({
               id: Math.random().toString(36).substr(2, 9),
-              type: 'gold_found',
+              type: 'euro_found',
               x: creature.x,
               y: creature.y,
               amount: 15,
               timestamp: Date.now()
             });
+          }
+
+          // Miner role logic: find euro anywhere
+          if (creature.role === 'miner' && Math.random() < 0.1) {
+            miningEuroBonus += 5;
           }
 
           if (Math.random() < 0.3) {
@@ -416,10 +478,11 @@ export default function App() {
         return creature;
       });
 
-      // 7. Ship Movement
+      // 7. Ship Movement & Combat
       let tradeIncome = 0;
       const newShips = ships.map(s => {
         const ship = { ...s };
+        
         if (ship.status === 'sailing' && ship.targetX !== undefined && ship.targetY !== undefined) {
           const dx = ship.targetX - ship.x;
           const dy = ship.targetY - ship.y;
@@ -432,10 +495,29 @@ export default function App() {
             ship.y += (dy / dist) * 5;
           }
         }
+
+        if (ship.status === 'attacking' && ship.targetId) {
+          // Combat logic: simplified for now, assuming target is on the same map or we just simulate damage
+          // In a real multi-island game, we'd need to know which island the target belongs to.
+          // For now, let's assume warships deal damage to their target if they are "close" (which they always are in this simplified view)
+          if (Math.random() < 0.3) { // Attack chance
+             // We'd need to find the target and reduce health.
+             // This is hard without knowing the target's island.
+             // Let's add a simple event for now.
+             newEvents.push({
+               id: Math.random().toString(36).substr(2, 9),
+               type: 'combat_action',
+               shipId: ship.id,
+               targetId: ship.targetId,
+               timestamp: Date.now()
+             });
+          }
+        }
+
         return ship;
       });
 
-      resources.gold += tradeIncome + miningGoldBonus;
+      resources.euro += tradeIncome + miningEuroBonus;
 
       await updateDoc(islandRef, {
         resources,
@@ -443,7 +525,7 @@ export default function App() {
         buildings,
         creatures: updatedCreatures,
         ships: newShips,
-        recentEvents: [...(island.recentEvents || []), ...newEvents].slice(-10),
+        recentEvents: [...(currentIslandData.recentEvents || []), ...newEvents].slice(-10),
         lastUpdated: Date.now()
       });
     }, 3000);
@@ -458,12 +540,12 @@ export default function App() {
 
   const handleBuyResource = async (res: keyof Resources, amount: number, price: number) => {
     if (!island || !user) return;
-    if (island.resources.gold < price) {
-      alert('Not enough gold!');
+    if (island.resources.euro < price) {
+      alert('Not enough euro!');
       return;
     }
     const newResources = { ...island.resources };
-    newResources.gold -= price;
+    newResources.euro -= price;
     (newResources[res] as number) += amount;
     await updateDoc(doc(db, 'islands', user.uid), { resources: newResources });
   };
@@ -478,36 +560,77 @@ export default function App() {
     // Launch logic
     await updateDoc(doc(db, 'islands', user.uid), { 'stats.missileCount': island.stats.missileCount - 1 });
     
-    // Impact logic (simplified: damage target island)
+    // Impact logic: damage target island buildings
     const targetDoc = await getDoc(doc(db, 'islands', targetId));
     if (targetDoc.exists()) {
       const targetData = targetDoc.data() as Island;
       const newBuildings = [...targetData.buildings];
+      
       if (newBuildings.length > 0) {
-        newBuildings.pop(); // Destroy last building
+        // Find a random building to damage
+        const targetIdx = Math.floor(Math.random() * newBuildings.length);
+        const targetBuilding = { ...newBuildings[targetIdx] };
+        
+        targetBuilding.health = (targetBuilding.health || 500) - 200;
+        
+        if (targetBuilding.health <= 0) {
+          newBuildings.splice(targetIdx, 1); // Destroyed
+        } else {
+          newBuildings[targetIdx] = targetBuilding;
+        }
       }
+
       const newStats = { ...targetData.stats };
       newStats.population = Math.max(0, newStats.population - 5);
       newStats.happiness = Math.max(0, newStats.happiness - 20);
       
       await updateDoc(doc(db, 'islands', targetId), { 
         buildings: newBuildings,
-        stats: newStats
+        stats: newStats,
+        recentEvents: arrayUnion({
+          id: Math.random().toString(36).substr(2, 9),
+          type: 'missile_hit',
+          timestamp: Date.now(),
+          from: island.name
+        })
       });
       alert('Missile impact confirmed!');
     }
   };
 
+  const handleAttack = async (shipId: string, targetId: string, targetType: 'ship' | 'building' | 'island') => {
+    if (!island || !user) return;
+    const newShips = island.ships.map(s => 
+      s.id === shipId ? { ...s, status: 'attacking' as const, targetId, targetType } : s
+    );
+    await updateDoc(doc(db, 'islands', user.uid), { ships: newShips });
+  };
+
+  const handleSetDiplomacy = async (targetIslandId: string, status: Diplomacy['status']) => {
+    if (!island || !user) return;
+    const existingDiplomacy = island.diplomacy || [];
+    const updatedDiplomacy = [...existingDiplomacy];
+    const index = updatedDiplomacy.findIndex(d => d.targetIslandId === targetIslandId);
+    
+    if (index >= 0) {
+      updatedDiplomacy[index] = { ...updatedDiplomacy[index], status };
+    } else {
+      updatedDiplomacy.push({ targetIslandId, status });
+    }
+    
+    await updateDoc(doc(db, 'islands', user.uid), { diplomacy: updatedDiplomacy });
+  };
+
   const handleResearch = async () => {
     if (!island || !user) return;
     const cost = island.stats.techLevel * 200;
-    if (island.resources.gold < cost) {
-      alert(`Not enough gold! Need ${cost} Gold.`);
+    if (island.resources.euro < cost) {
+      alert(`Not enough euro! Need ${cost} Euro.`);
       return;
     }
 
     await updateDoc(doc(db, 'islands', user.uid), {
-      'resources.gold': island.resources.gold - cost,
+      'resources.euro': island.resources.euro - cost,
       'stats.techPoints': island.stats.techPoints + 50
     });
   };
@@ -516,17 +639,18 @@ export default function App() {
     if (!island || !user) return;
 
     const costs: Record<string, Partial<Resources>> = {
-      house: { gold: 50, wood: 20 },
+      house: { euro: 50, wood: 20 },
       farm: { wood: 30, food: 10 },
       mine: { wood: 50, stone: 20 },
       storage: { wood: 40, stone: 40 },
-      lab: { gold: 200, electronics: 10 },
-      oil_rig: { gold: 500, electronics: 50 },
-      factory: { gold: 800, electronics: 100, stone: 200 },
-      university: { gold: 1500, electronics: 200 },
-      hospital: { gold: 1200, stone: 300, wood: 200 },
-      bank: { gold: 2000, stone: 500 },
-      missile_silo: { gold: 5000, oil: 500, electronics: 300 },
+      lab: { euro: 200, electronics: 10 },
+      oil_rig: { euro: 500, electronics: 50 },
+      factory: { euro: 800, electronics: 100, stone: 200 },
+      university: { euro: 1500, electronics: 200 },
+      hospital: { euro: 1200, stone: 300, wood: 200 },
+      bank: { euro: 2000, stone: 500 },
+      missile_silo: { euro: 5000, oil: 500, electronics: 300 },
+      navy_base: { euro: 3000, stone: 1000, electronics: 500 },
     };
 
     const cost = costs[type];
@@ -545,7 +669,9 @@ export default function App() {
       x,
       y,
       progress: 0,
-      level: 1
+      level: 1,
+      health: 500,
+      maxHealth: 500
     };
 
     const newResources = { ...island.resources };
@@ -561,10 +687,23 @@ export default function App() {
     setIsPlacing(null);
   };
 
+  const handleUpdateCreatureRole = async (creatureId: string, newRole: Creature['role']) => {
+    if (!island || !user) return;
+    const updatedCreatures = island.creatures.map(c => {
+      if (c.id === creatureId) {
+        return { ...c, role: newRole };
+      }
+      return c;
+    });
+    await updateDoc(doc(db, 'islands', user.uid), {
+      creatures: updatedCreatures
+    });
+  };
+
   const handleRecruitCreature = async (type: Creature['type'], role: Creature['role']) => {
     if (!island || !user) return;
-    const cost = { gold: 100, food: 50 };
-    if (island.resources.gold < cost.gold || island.resources.food < cost.food) {
+    const cost = { euro: 100, food: 50 };
+    if (island.resources.euro < cost.euro || island.resources.food < cost.food) {
       alert('Not enough resources to recruit!');
       return;
     }
@@ -580,7 +719,7 @@ export default function App() {
     };
 
     await updateDoc(doc(db, 'islands', user.uid), {
-      'resources.gold': island.resources.gold - cost.gold,
+      'resources.euro': island.resources.euro - cost.euro,
       'resources.food': island.resources.food - cost.food,
       creatures: [...island.creatures, newCreature]
     });
@@ -589,12 +728,12 @@ export default function App() {
   const handleBuildShip = async (type: 'merchant' | 'explorer' | 'warship') => {
     if (!island || !user) return;
     const costs = {
-      merchant: { gold: 500, wood: 200 },
-      explorer: { gold: 300, wood: 150 },
-      warship: { gold: 1000, wood: 400, electronics: 50 }
+      merchant: { euro: 500, wood: 200 },
+      explorer: { euro: 300, wood: 150 },
+      warship: { euro: 1000, wood: 400, electronics: 50 }
     };
     const cost = costs[type];
-    if (island.resources.gold < cost.gold || island.resources.wood < (cost.wood || 0)) {
+    if (island.resources.euro < cost.euro || island.resources.wood < (cost.wood || 0)) {
       alert('Not enough resources to build ship!');
       return;
     }
@@ -605,11 +744,15 @@ export default function App() {
       x: 0,
       y: 0,
       cargo: {},
-      status: 'idle'
+      status: 'idle',
+      health: type === 'warship' ? 1000 : 500,
+      maxHealth: type === 'warship' ? 1000 : 500,
+      attackPower: type === 'warship' ? 50 : 0,
+      weaponType: type === 'warship' ? 'cannon' : 'none'
     };
 
     await updateDoc(doc(db, 'islands', user.uid), {
-      'resources.gold': island.resources.gold - cost.gold,
+      'resources.euro': island.resources.euro - cost.euro,
       'resources.wood': island.resources.wood - (cost.wood || 0),
       ships: [...(island.ships || []), newShip]
     });
@@ -623,6 +766,36 @@ export default function App() {
     await updateDoc(doc(db, 'islands', user.uid), { ships: newShips });
   };
 
+  const handleUpdateWorkStatus = async (status: 'working' | 'resting') => {
+    if (!island || !user) return;
+    const newStats = { ...island.stats, workStatus: status };
+    await updateDoc(doc(db, 'islands', user.uid), { stats: newStats });
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const email = form.email.value;
+    const password = form.password.value;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleEmailSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const email = form.email.value;
+    const password = form.password.value;
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-blue-950 text-white">
@@ -632,42 +805,7 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className="h-screen w-screen relative overflow-hidden bg-blue-950 flex flex-col items-center justify-center text-white p-6">
-        {/* Background Atmosphere */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-[128px]" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-500 rounded-full blur-[128px]" />
-        </div>
-
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="relative z-10 text-center max-w-2xl"
-        >
-          <h1 className="text-7xl font-black mb-6 tracking-tighter uppercase italic">
-            Island <span className="text-blue-400">Empires</span>
-          </h1>
-          <p className="text-xl text-blue-200/60 mb-12 font-medium">
-            Build your empire, conquer the seas, and forge alliances in this 3D multiplayer strategy experience.
-          </p>
-
-          <div className="grid grid-cols-3 gap-8 mb-16">
-            <Feature icon={Shield} title="Defend" desc="Build fortifications" />
-            <Feature icon={Swords} title="Conquer" desc="Expand your reach" />
-            <Feature icon={Trophy} title="Rank" desc="Global leaderboard" />
-          </div>
-
-          <button
-            onClick={handleLogin}
-            className="group relative bg-white text-blue-950 px-12 py-5 rounded-full font-black text-xl flex items-center gap-4 hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.2)]"
-          >
-            <LogIn size={24} />
-            START YOUR JOURNEY
-          </button>
-        </motion.div>
-      </div>
-    );
+    return <Login onGoogleLogin={handleLogin} onEmailLogin={handleEmailLogin} onEmailSignup={handleEmailSignup} />;
   }
 
   return (
@@ -678,6 +816,7 @@ export default function App() {
             island={currentIsland} 
             onPlaceBuilding={handlePlaceBuilding} 
             isPlacing={viewingIslandId ? null : isPlacing} 
+            onUpdateCreatureRole={handleUpdateCreatureRole}
           />
           <HUD 
             resources={island?.resources || INITIAL_RESOURCES} 
@@ -689,14 +828,16 @@ export default function App() {
               techPoints: 0, 
               techLevel: 1, 
               missileCount: 0,
-              currencyType: 'Gold',
+              currencyType: 'Euro',
               ideology: 'Neutral',
               activeCrisis: 'None',
               crisisDuration: 0,
-              gdp: 0
+              gdp: 0,
+              workStatus: 'working'
             }}
             creatures={island?.creatures || []}
             ships={island?.ships || []}
+            otherIslands={otherIslands}
             onSelectBuilding={setIsPlacing} 
             isPlacing={isPlacing}
             onOpenAlliances={() => alert('Alliances coming soon!')}
@@ -713,6 +854,10 @@ export default function App() {
             onRecruitCreature={handleRecruitCreature}
             onBuildShip={handleBuildShip}
             onSendShip={handleSendShip}
+            onAttack={handleAttack}
+            onLaunchMissile={handleLaunchMissile}
+            onSetDiplomacy={handleSetDiplomacy}
+            onUpdateWorkStatus={handleUpdateWorkStatus}
           />
 
           {/* Crisis Overlays */}

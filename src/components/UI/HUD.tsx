@@ -6,7 +6,9 @@ import {
   Factory, GraduationCap, Hospital, Landmark, TrendingUp, AlertTriangle,
   Zap, Atom
 } from 'lucide-react';
-import { Resources, Building, IslandStats, Creature, Ship } from '../../types';
+import { 
+  Resources, Building, IslandStats, Creature, Ship, Island, Diplomacy 
+} from '../../types';
 import { useState } from 'react';
 
 interface HUDProps {
@@ -14,6 +16,7 @@ interface HUDProps {
   stats: IslandStats;
   creatures: Creature[];
   ships: Ship[];
+  otherIslands: Island[];
   onSelectBuilding: (type: string | null) => void;
   isPlacing: string | null;
   onOpenAlliances: () => void;
@@ -24,35 +27,41 @@ interface HUDProps {
   onRecruitCreature: (type: Creature['type'], role: Creature['role']) => void;
   onBuildShip: (type: Ship['type']) => void;
   onSendShip: (shipId: string, x: number, y: number) => void;
+  onAttack: (shipId: string, targetId: string, targetType: 'ship' | 'building' | 'island') => void;
+  onLaunchMissile: (targetId: string) => void;
+  onSetDiplomacy: (targetIslandId: string, status: Diplomacy['status']) => void;
+  onUpdateWorkStatus: (status: 'working' | 'resting') => void;
 }
 
 const BUILDINGS = [
-  { type: 'house', name: 'House', cost: { gold: 50, wood: 20 }, icon: Hammer, minTech: 1 },
-  { type: 'farm', name: 'Farm', cost: { wood: 30, food: 10 }, icon: Utensils, minTech: 1 },
-  { type: 'mine', name: 'Mine', cost: { wood: 50, stone: 20 }, icon: Mountain, minTech: 1 },
-  { type: 'storage', name: 'Storage', cost: { wood: 40, stone: 40 }, icon: Coins, minTech: 1 },
-  { type: 'lab', name: 'Lab', cost: { gold: 200, electronics: 10 }, icon: Microscope, minTech: 2 },
-  { type: 'oil_rig', name: 'Oil Rig', cost: { gold: 500, electronics: 50 }, icon: Droplet, minTech: 3 },
-  { type: 'factory', name: 'Factory', cost: { gold: 800, electronics: 100, stone: 200 }, icon: Factory, minTech: 4 },
-  { type: 'university', name: 'University', cost: { gold: 1500, electronics: 200 }, icon: GraduationCap, minTech: 5 },
-  { type: 'hospital', name: 'Hospital', cost: { gold: 1200, stone: 300, wood: 200 }, icon: Hospital, minTech: 4 },
-  { type: 'bank', name: 'Bank', cost: { gold: 2000, stone: 500 }, icon: Landmark, minTech: 6 },
-  { type: 'missile_silo', name: 'Missile Silo', cost: { gold: 5000, oil: 500, electronics: 300 }, icon: Rocket, minTech: 7 },
+  { type: 'house', name: 'Ev', cost: { euro: 50, wood: 20 }, icon: Hammer, minTech: 1 },
+  { type: 'farm', name: 'Çiftlik', cost: { wood: 30, food: 10 }, icon: Utensils, minTech: 1 },
+  { type: 'mine', name: 'Maden', cost: { wood: 50, stone: 20 }, icon: Mountain, minTech: 1 },
+  { type: 'storage', name: 'Depo', cost: { wood: 40, stone: 40 }, icon: Coins, minTech: 1 },
+  { type: 'lab', name: 'Laboratuvar', cost: { euro: 200, electronics: 10 }, icon: Microscope, minTech: 2 },
+  { type: 'oil_rig', name: 'Petrol Kuyusu', cost: { euro: 500, electronics: 50 }, icon: Droplet, minTech: 3 },
+  { type: 'factory', name: 'Fabrika', cost: { euro: 800, electronics: 100, stone: 200 }, icon: Factory, minTech: 4 },
+  { type: 'university', name: 'Üniversite', cost: { euro: 1500, electronics: 200 }, icon: GraduationCap, minTech: 5 },
+  { type: 'hospital', name: 'Hastane', cost: { euro: 1200, stone: 300, wood: 200 }, icon: Hospital, minTech: 4 },
+  { type: 'bank', name: 'Banka', cost: { euro: 2000, stone: 500 }, icon: Landmark, minTech: 6 },
+  { type: 'missile_silo', name: 'Füze Silosu', cost: { euro: 5000, oil: 500, electronics: 300 }, icon: Rocket, minTech: 7 },
+  { type: 'navy_base', name: 'Deniz Üssü', cost: { euro: 3000, stone: 1000, electronics: 500 }, icon: ShieldCheck, minTech: 5 },
 ];
 
 const MARKET_ITEMS = [
-  { res: 'oil', name: 'Oil', amount: 10, price: 100, icon: Droplet },
-  { res: 'fruits', name: 'Fruits', amount: 20, price: 50, icon: Apple },
-  { res: 'electronics', name: 'Electronics', amount: 5, price: 200, icon: Cpu },
-  { res: 'food', name: 'Food', amount: 50, price: 30, icon: Utensils },
+  { res: 'oil', name: 'Petrol', amount: 10, price: 100, icon: Droplet },
+  { res: 'fruits', name: 'Meyve', amount: 20, price: 50, icon: Apple },
+  { res: 'electronics', name: 'Elektronik', amount: 5, price: 200, icon: Cpu },
+  { res: 'food', name: 'Yiyecek', amount: 50, price: 30, icon: Utensils },
 ];
 
 export function HUD({ 
-  resources, stats, creatures, ships, onSelectBuilding, isPlacing, 
+  resources, stats, creatures, ships, otherIslands, onSelectBuilding, isPlacing, 
   onOpenAlliances, onOpenTrades, onUpdateTax, onBuyResource, onResearch,
-  onRecruitCreature, onBuildShip, onSendShip
+  onRecruitCreature, onBuildShip, onSendShip, onAttack, onLaunchMissile,
+  onSetDiplomacy, onUpdateWorkStatus
 }: HUDProps) {
-  const [activeTab, setActiveTab] = useState<'build' | 'market' | 'tech' | 'creatures' | 'ships' | null>(null);
+  const [activeTab, setActiveTab] = useState<'build' | 'market' | 'tech' | 'creatures' | 'ships' | 'diplomacy' | null>(null);
 
   const currencyIcons: Record<string, any> = {
     'Gold': Coins,
@@ -67,20 +76,20 @@ export function HUD({
       {/* Top Bar: Resources & Stats */}
       <div className="flex flex-col gap-4 items-center">
         <div className="flex justify-center gap-2 pointer-events-auto flex-wrap max-w-4xl">
-          <ResourceItem icon={CurrencyIcon} value={resources.gold} label={stats.currencyType} color="text-yellow-400" />
-          <ResourceItem icon={Utensils} value={resources.food} label="Food" color="text-orange-400" />
-          <ResourceItem icon={TreeDeciduous} value={resources.wood} label="Wood" color="text-green-400" />
-          <ResourceItem icon={Mountain} value={resources.stone} label="Stone" color="text-gray-400" />
-          <ResourceItem icon={Droplet} value={resources.oil} label="Oil" color="text-blue-600" />
-          <ResourceItem icon={Apple} value={resources.fruits} label="Fruits" color="text-red-400" />
-          <ResourceItem icon={Cpu} value={resources.electronics} label="Electronics" color="text-cyan-400" />
+          <ResourceItem icon={CurrencyIcon} value={resources.euro} label={stats.currencyType === 'Euro' ? 'Euro' : stats.currencyType} color="text-yellow-400" />
+          <ResourceItem icon={Utensils} value={resources.food} label="Yiyecek" color="text-orange-400" />
+          <ResourceItem icon={TreeDeciduous} value={resources.wood} label="Odun" color="text-green-400" />
+          <ResourceItem icon={Mountain} value={resources.stone} label="Taş" color="text-gray-400" />
+          <ResourceItem icon={Droplet} value={resources.oil} label="Petrol" color="text-blue-600" />
+          <ResourceItem icon={Apple} value={resources.fruits} label="Meyve" color="text-red-400" />
+          <ResourceItem icon={Cpu} value={resources.electronics} label="Elektronik" color="text-cyan-400" />
         </div>
         
         <div className="flex justify-center gap-4 pointer-events-auto">
-          <StatItem icon={Users2} value={`${Math.floor(stats.population)}/${stats.maxPopulation}`} label="Population" color="text-blue-400" />
-          <StatItem icon={Heart} value={`${Math.floor(stats.happiness)}%`} label="Happiness" color="text-pink-400" />
-          <StatItem icon={TrendingUp} value={`$${Math.floor(stats.gdp)}B`} label="GDP" color="text-emerald-400" />
-          <StatItem icon={FlaskConical} value={`Lv.${stats.techLevel}`} label="Tech" color="text-purple-400" />
+          <StatItem icon={Users2} value={`${Math.floor(stats.population)}/${stats.maxPopulation}`} label="Nüfus" color="text-blue-400" />
+          <StatItem icon={Heart} value={`${Math.floor(stats.happiness)}%`} label="Mutluluk" color="text-pink-400" />
+          <StatItem icon={TrendingUp} value={`$${Math.floor(stats.gdp)}B`} label="GSYH" color="text-emerald-400" />
+          <StatItem icon={FlaskConical} value={`Lv.${stats.techLevel}`} label="Teknoloji" color="text-purple-400" />
           
           {stats.activeCrisis !== 'None' && (
             <div className="bg-red-600/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-red-400 flex items-center gap-2 shadow-xl animate-pulse">
@@ -102,23 +111,35 @@ export function HUD({
                 onChange={(e) => onUpdateTax(parseInt(e.target.value))}
                 className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
-              <span className="text-[10px] text-white/50 uppercase tracking-wider">Tax: {stats.taxRate}%</span>
+              <span className="text-[10px] text-white/50 uppercase tracking-wider">Vergi: {stats.taxRate}%</span>
             </div>
+          </div>
+
+          <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 shadow-xl pointer-events-auto">
+            <button
+              onClick={() => onUpdateWorkStatus(stats.workStatus === 'working' ? 'resting' : 'working')}
+              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
+                stats.workStatus === 'working' ? 'bg-emerald-500 text-white' : 'bg-orange-500 text-white'
+              }`}
+            >
+              {stats.workStatus === 'working' ? 'Çalışma Modu' : 'Dinlenme Modu'}
+            </button>
           </div>
         </div>
       </div>
 
       {/* Side Bar: Social & Tabs */}
       <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 pointer-events-auto">
-        <MenuButton icon={Users} onClick={onOpenAlliances} label="Alliances" />
-        <MenuButton icon={Repeat} onClick={onOpenTrades} label="World Map" />
+        <MenuButton icon={Users} onClick={onOpenAlliances} label="İttifaklar" />
+        <MenuButton icon={Repeat} onClick={onOpenTrades} label="Dünya Haritası" />
         <div className="h-px bg-white/10 my-2" />
-        <MenuButton icon={ShoppingCart} onClick={() => setActiveTab(activeTab === 'market' ? null : 'market')} label="Market" active={activeTab === 'market'} />
-        <MenuButton icon={Microscope} onClick={() => setActiveTab(activeTab === 'tech' ? null : 'tech')} label="Technology" active={activeTab === 'tech'} />
-        <MenuButton icon={UserPlus} onClick={() => setActiveTab(activeTab === 'creatures' ? null : 'creatures')} label="Creatures" active={activeTab === 'creatures'} />
-        <MenuButton icon={Rocket} onClick={() => setActiveTab(activeTab === 'ships' ? null : 'ships')} label="Ships & Fleet" active={activeTab === 'ships'} />
+        <MenuButton icon={ShoppingCart} onClick={() => setActiveTab(activeTab === 'market' ? null : 'market')} label="Pazar" active={activeTab === 'market'} />
+        <MenuButton icon={Microscope} onClick={() => setActiveTab(activeTab === 'tech' ? null : 'tech')} label="Teknoloji" active={activeTab === 'tech'} />
+        <MenuButton icon={UserPlus} onClick={() => setActiveTab(activeTab === 'creatures' ? null : 'creatures')} label="Vatandaşlar" active={activeTab === 'creatures'} />
+        <MenuButton icon={Rocket} onClick={() => setActiveTab(activeTab === 'ships' ? null : 'ships')} label="Gemiler ve Donanma" active={activeTab === 'ships'} />
+        <MenuButton icon={ShieldCheck} onClick={() => setActiveTab(activeTab === 'diplomacy' ? null : 'diplomacy')} label="Diplomasi" active={activeTab === 'diplomacy'} />
         <div className="h-px bg-white/10 my-2" />
-        <MenuButton icon={Hammer} onClick={() => setActiveTab(activeTab === 'build' ? null : 'build')} label="Build Menu" active={activeTab === 'build'} />
+        <MenuButton icon={Hammer} onClick={() => setActiveTab(activeTab === 'build' ? null : 'build')} label="İnşa Menüsü" active={activeTab === 'build'} />
       </div>
 
       {/* Bottom Center: Active Tab Content */}
@@ -139,7 +160,7 @@ export function HUD({
                 >
                   <item.icon size={24} className="text-blue-400" />
                   <span className="text-xs font-bold">{item.amount} {item.name}</span>
-                  <span className="text-[10px] text-yellow-400 font-mono">{item.price} Gold</span>
+                  <span className="text-[10px] text-yellow-400 font-mono">{item.price} Euro</span>
                 </button>
               ))}
             </motion.div>
@@ -154,8 +175,8 @@ export function HUD({
             >
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <h3 className="text-lg font-bold">Technology Level {stats.techLevel}</h3>
-                  <p className="text-xs text-white/50">Progress to next level</p>
+                  <h3 className="text-lg font-bold">Teknoloji Seviyesi {stats.techLevel}</h3>
+                  <p className="text-xs text-white/50">Sonraki seviyeye ilerleme</p>
                 </div>
                 <span className="text-xs font-mono">{Math.floor(stats.techPoints)} / {stats.techLevel * 120}</span>
               </div>
@@ -177,11 +198,11 @@ export function HUD({
               className="bg-black/60 backdrop-blur-xl p-4 rounded-3xl border border-white/10 flex flex-col gap-4 w-80"
             >
               <div>
-                <h3 className="text-sm font-bold px-2 mb-2">Population Roles</h3>
+                <h3 className="text-sm font-bold px-2 mb-2">Vatandaş Rolleri</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {['worker', 'soldier', 'scientist', 'farmer', 'politician', 'artist'].map((role) => (
+                  {['worker', 'soldier', 'scientist', 'farmer', 'politician', 'artist', 'miner'].map((role) => (
                     <div key={role} className="flex justify-between items-center p-2 rounded-xl bg-white/5">
-                      <span className="text-[10px] capitalize">{role}s</span>
+                      <span className="text-[10px] capitalize">{role}</span>
                       <span className="text-[10px] font-mono">{creatures.filter(c => c.role === role).length}</span>
                     </div>
                   ))}
@@ -191,7 +212,7 @@ export function HUD({
               <div className="h-px bg-white/10" />
 
               <div>
-                <h3 className="text-sm font-bold px-2 mb-2">Recruit New Citizen</h3>
+                <h3 className="text-sm font-bold px-2 mb-2">Yeni Vatandaş Al</h3>
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                     {['human', 'beast', 'robot', 'cyborg', 'spirit', 'alien'].map((type) => (
@@ -204,7 +225,7 @@ export function HUD({
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-white/40 px-2 italic">Cost: 100 Gold, 50 Food</p>
+                  <p className="text-[10px] text-white/40 px-2 italic">Maliyet: 100 Euro, 50 Yiyecek</p>
                 </div>
               </div>
             </motion.div>
@@ -221,17 +242,38 @@ export function HUD({
                 <h3 className="text-sm font-bold px-2 mb-2">Your Fleet</h3>
                 <div className="flex flex-col gap-2 max-h-40 overflow-y-auto no-scrollbar">
                   {(ships || []).map((ship) => (
-                    <div key={ship.id} className="flex justify-between items-center p-2 rounded-xl bg-white/5">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] capitalize font-bold">{ship.type}</span>
-                        <span className="text-[8px] text-white/40 uppercase">{ship.status}</span>
+                    <div key={ship.id} className="flex flex-col p-2 rounded-xl bg-white/5 gap-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] capitalize font-bold">{ship.type}</span>
+                          <span className="text-[8px] text-white/40 uppercase">{ship.status}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => onOpenTrades()} 
+                            className="bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 px-2 py-1 rounded text-[8px] font-bold"
+                          >
+                            SEND
+                          </button>
+                          {ship.type === 'warship' && (
+                            <button 
+                              onClick={() => {
+                                const target = otherIslands[0]; // Simplified: attack first other island
+                                if (target) onAttack(ship.id, target.id, 'island');
+                              }}
+                              className="bg-red-500/20 hover:bg-red-500/40 text-red-400 px-2 py-1 rounded text-[8px] font-bold"
+                            >
+                              ATTACK
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <button 
-                        onClick={() => onOpenTrades()} // Open map to send
-                        className="bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 px-2 py-1 rounded text-[8px] font-bold"
-                      >
-                        SEND
-                      </button>
+                      <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500" 
+                          style={{ width: `${(ship.health / ship.maxHealth) * 100}%` }}
+                        />
+                      </div>
                     </div>
                   ))}
                   {(!ships || ships.length === 0) && <p className="text-[10px] text-white/30 text-center py-2">No ships in fleet</p>}
@@ -242,9 +284,9 @@ export function HUD({
                 <h3 className="text-sm font-bold px-2 mb-2">Build Ship</h3>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { type: 'merchant', icon: Repeat, cost: '500G' },
-                    { type: 'explorer', icon: Microscope, cost: '300G' },
-                    { type: 'warship', icon: ShieldCheck, cost: '1000G' }
+                    { type: 'merchant', icon: Repeat, cost: '500E' },
+                    { type: 'explorer', icon: Microscope, cost: '300E' },
+                    { type: 'warship', icon: ShieldCheck, cost: '1000E' }
                   ].map((s) => (
                     <button
                       key={s.type}
@@ -257,6 +299,57 @@ export function HUD({
                     </button>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'diplomacy' && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="bg-black/60 backdrop-blur-xl p-4 rounded-3xl border border-white/10 flex flex-col gap-4 w-80"
+            >
+              <h3 className="text-sm font-bold px-2 mb-2">Diplomasi</h3>
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto no-scrollbar">
+                {otherIslands.map((target) => (
+                  <div key={target.id} className="p-3 rounded-2xl bg-white/5 flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold">{target.name}</span>
+                      <span className="text-[8px] text-white/40 uppercase">
+                        {stats.missileCount > 0 && (
+                          <button 
+                            onClick={() => onLaunchMissile(target.id)}
+                            className="text-red-400 hover:text-red-300 ml-2"
+                          >
+                            <Rocket size={12} />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <button 
+                        onClick={() => onSetDiplomacy(target.id, 'war')}
+                        className="bg-red-500/20 hover:bg-red-500/40 text-red-400 p-1 rounded text-[8px] font-bold"
+                      >
+                        Savaş
+                      </button>
+                      <button 
+                        onClick={() => onSetDiplomacy(target.id, 'alliance')}
+                        className="bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 p-1 rounded text-[8px] font-bold"
+                      >
+                        İttifak
+                      </button>
+                      <button 
+                        onClick={() => onSetDiplomacy(target.id, 'trade_agreement')}
+                        className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 p-1 rounded text-[8px] font-bold"
+                      >
+                        Ticaret
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {otherIslands.length === 0 && <p className="text-[10px] text-white/30 text-center py-2">No other islands discovered</p>}
               </div>
             </motion.div>
           )}

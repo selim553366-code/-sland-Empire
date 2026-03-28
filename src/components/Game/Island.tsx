@@ -8,9 +8,10 @@ interface IslandProps {
   island: IslandType;
   onPlaceBuilding: (type: string, x: number, y: number) => void;
   isPlacing: string | null;
+  onUpdateCreatureRole: (creatureId: string, newRole: Creature['role']) => void;
 }
 
-export function Island({ island, onPlaceBuilding, isPlacing }: IslandProps) {
+export function Island({ island, onPlaceBuilding, isPlacing, onUpdateCreatureRole }: IslandProps) {
   const [hoverPos, setHoverPos] = useState<[number, number] | null>(null);
   const { ships = [] } = island;
 
@@ -57,9 +58,14 @@ export function Island({ island, onPlaceBuilding, isPlacing }: IslandProps) {
         <BuildingMesh key={b.id} building={b} />
       ))}
 
+      {/* Trees (Forest) */}
+      {island.trees?.map((t) => (
+        <TreeMesh key={t.id} tree={t} />
+      ))}
+
       {/* Creatures */}
       {island.creatures?.map((c) => (
-        <CreatureMesh key={c.id} creature={c} />
+        <CreatureMesh key={c.id} creature={c} onUpdateRole={onUpdateCreatureRole} />
       ))}
 
       {/* Ships */}
@@ -68,7 +74,7 @@ export function Island({ island, onPlaceBuilding, isPlacing }: IslandProps) {
       ))}
 
       {/* Recent Events (Floating Text) */}
-      {(island as any).recentEvents?.map((event: any) => (
+      {island?.recentEvents?.map((event: any) => (
         <FloatingEvent key={event.id} event={event} />
       ))}
 
@@ -95,7 +101,49 @@ export function Island({ island, onPlaceBuilding, isPlacing }: IslandProps) {
   );
 }
 
-function CreatureMesh({ creature }: { creature: Creature }) {
+function TreeMesh({ tree }: { tree: any }) {
+  const color = tree.type === 'palm' ? '#228b22' : tree.type === 'pine' ? '#006400' : '#32cd32';
+  return (
+    <group position={[tree.x, 0.2, tree.y]}>
+      {/* Trunk */}
+      <Cylinder args={[0.1, 0.15, 1, 8]} position={[0, 0.5, 0]} castShadow>
+        <meshStandardMaterial color="#8b4513" />
+      </Cylinder>
+      
+      {/* Leaves */}
+      {tree.type === 'pine' ? (
+        <group position={[0, 1.2, 0]}>
+          <Cylinder args={[0, 0.6, 1, 8]} position={[0, 0, 0]} castShadow>
+            <meshStandardMaterial color={color} />
+          </Cylinder>
+          <Cylinder args={[0, 0.4, 0.8, 8]} position={[0, 0.5, 0]} castShadow>
+            <meshStandardMaterial color={color} />
+          </Cylinder>
+        </group>
+      ) : tree.type === 'palm' ? (
+        <group position={[0, 1, 0]}>
+          {[...Array(5)].map((_, i) => (
+            <Box 
+              key={i} 
+              args={[1.2, 0.05, 0.3]} 
+              position={[0, 0, 0]} 
+              rotation={[0, (i * Math.PI * 2) / 5, 0.3]} 
+              castShadow
+            >
+              <meshStandardMaterial color={color} />
+            </Box>
+          ))}
+        </group>
+      ) : (
+        <Sphere args={[0.6, 12, 12]} position={[0, 1.3, 0]} castShadow>
+          <meshStandardMaterial color={color} />
+        </Sphere>
+      )}
+    </group>
+  );
+}
+
+function CreatureMesh({ creature, onUpdateRole }: { creature: Creature, onUpdateRole: (id: string, role: Creature['role']) => void }) {
   const groupRef = useRef<THREE.Group>(null);
   const [pos, setPos] = useState(new THREE.Vector3(creature.x, 0.5, creature.y));
   
@@ -107,6 +155,14 @@ function CreatureMesh({ creature }: { creature: Creature }) {
     spirit: '#00ffff',
     alien: '#32cd32'
   }[creature.type] || '#ffffff';
+
+  const handlePointerDown = (e: any) => {
+    e.stopPropagation();
+    const roles: Creature['role'][] = ['worker', 'soldier', 'scientist', 'farmer', 'politician', 'artist', 'miner'];
+    const currentIndex = roles.indexOf(creature.role);
+    const nextRole = roles[(currentIndex + 1) % roles.length];
+    onUpdateRole(creature.id, nextRole);
+  };
 
   useFrame((state, delta) => {
     if (groupRef.current) {
@@ -143,7 +199,7 @@ function CreatureMesh({ creature }: { creature: Creature }) {
   });
 
   return (
-    <group ref={groupRef} position={[creature.x, 0.5, creature.y]}>
+    <group ref={groupRef} position={[creature.x, 0.5, creature.y]} onPointerDown={handlePointerDown}>
       {creature.type === 'spirit' ? (
         <Sphere args={[0.3, 16, 16]} castShadow>
           <meshStandardMaterial color={color} transparent opacity={0.6} emissive={color} emissiveIntensity={2} />
@@ -176,6 +232,7 @@ function CreatureMesh({ creature }: { creature: Creature }) {
 function BuildingMesh({ building }: { building: Building }) {
   // Building evolution based on progress and potentially tech level
   const isEvolved = building.progress >= 100;
+  const healthPercent = (building.health || 500) / (building.maxHealth || 500);
   
   const color = {
     house: '#d2b48c',
@@ -320,12 +377,24 @@ function BuildingMesh({ building }: { building: Building }) {
       
       {/* Progress Indicator */}
       <Text
-        position={[0, 2, 0]}
+        position={[0, 2.2, 0]}
         fontSize={0.3}
         color="white"
       >
         {Math.floor(building.progress)}%
       </Text>
+
+      {/* Health Bar */}
+      {isEvolved && (
+        <group position={[0, 1.8, 0]}>
+          <Box args={[1, 0.1, 0.1]}>
+            <meshStandardMaterial color="#333" />
+          </Box>
+          <Box args={[healthPercent, 0.1, 0.11]} position={[(healthPercent - 1) / 2, 0, 0]}>
+            <meshStandardMaterial color={healthPercent > 0.5 ? "#22c55e" : healthPercent > 0.2 ? "#eab308" : "#ef4444"} />
+          </Box>
+        </group>
+      )}
     </group>
   );
 }
@@ -360,7 +429,7 @@ function FloatingEvent({ event }: { event: any }) {
         outlineWidth={0.05}
         outlineColor="black"
       >
-        +{event.amount} Gold!
+        +{event.amount} Euro!
       </Text>
     </group>
   );
@@ -368,6 +437,7 @@ function FloatingEvent({ event }: { event: any }) {
 
 function ShipMesh({ ship }: { ship: Ship }) {
   const groupRef = useRef<THREE.Group>(null);
+  const healthPercent = (ship.health || 500) / (ship.maxHealth || 500);
   
   // Only render if ship is near the island (simplified)
   const isNear = Math.sqrt(ship.x * ship.x + ship.y * ship.y) < 50;
@@ -397,6 +467,16 @@ function ShipMesh({ ship }: { ship: Ship }) {
       <Box args={[0.8, 1, 0.1]} position={[0.3, 1, 0]} castShadow>
         <meshStandardMaterial color="#f5f5f5" />
       </Box>
+
+      {/* Health Bar */}
+      <group position={[0, 2, 0]}>
+        <Box args={[1, 0.1, 0.1]}>
+          <meshStandardMaterial color="#333" />
+        </Box>
+        <Box args={[healthPercent, 0.1, 0.11]} position={[(healthPercent - 1) / 2, 0, 0]}>
+          <meshStandardMaterial color={healthPercent > 0.5 ? "#22c55e" : healthPercent > 0.2 ? "#eab308" : "#ef4444"} />
+        </Box>
+      </group>
     </group>
   );
 }

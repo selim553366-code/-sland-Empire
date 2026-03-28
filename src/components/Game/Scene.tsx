@@ -1,15 +1,16 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sky, Stars, Environment } from '@react-three/drei';
 import { Island } from './Island';
-import { Island as IslandType } from '../../types';
+import { Island as IslandType, Creature } from '../../types';
 
 interface SceneProps {
   island: IslandType;
   onPlaceBuilding: (type: string, x: number, y: number) => void;
   isPlacing: string | null;
+  onUpdateCreatureRole: (creatureId: string, newRole: Creature['role']) => void;
 }
 
-export function Scene({ island, onPlaceBuilding, isPlacing }: SceneProps) {
+export function Scene({ island, onPlaceBuilding, isPlacing, onUpdateCreatureRole }: SceneProps) {
   return (
     <div className="w-full h-full bg-blue-900">
       <Canvas
@@ -32,6 +33,7 @@ export function Scene({ island, onPlaceBuilding, isPlacing }: SceneProps) {
           island={island} 
           onPlaceBuilding={onPlaceBuilding} 
           isPlacing={isPlacing}
+          onUpdateCreatureRole={onUpdateCreatureRole}
         />
 
         {/* Water */}
