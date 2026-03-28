@@ -13,14 +13,20 @@ interface WorldMapProps {
   discoveredIslandIds: string[];
   onSendShip: (shipId: string, x: number, y: number) => void;
   ships: Ship[];
+  onSettle: (islandId: string) => void;
+  externalSelectedShipId?: string | null;
+  externalSelectedSiloId?: string | null;
+  activeMissiles?: { id: string, start: [number, number], end: [number, number], progress: number }[];
 }
 
 export function WorldMap({ 
   onClose, islands, currentIslandId, onVisit, onLaunchMissile, 
-  missileCount, discoveredIslandIds, onSendShip, ships 
+  missileCount, discoveredIslandIds, onSendShip, ships, onSettle,
+  externalSelectedShipId, externalSelectedSiloId, activeMissiles
 }: WorldMapProps) {
   const [view, setView] = useState<'list' | 'grid'>('grid');
-  const [selectedShipId, setSelectedShipId] = useState<string | null>(null);
+  const [localSelectedShipId, setLocalSelectedShipId] = useState<string | null>(null);
+  const activeShipId = externalSelectedShipId || localSelectedShipId;
 
   const worldSize = 200; // -100 to 100
   return (
@@ -71,30 +77,80 @@ export function WorldMap({
               {islands.map((island) => {
                 const isSelf = island.id === currentIslandId;
                 const isDiscovered = discoveredIslandIds.includes(island.id);
-                if (!isDiscovered && !isSelf) return null;
-
-                // Simplified world pos
-                const x = isSelf ? 0 : (Math.random() - 0.5) * 160;
-                const y = isSelf ? 0 : (Math.random() - 0.5) * 160;
+                
+                // Simplified world pos (should be consistent)
+                const seed = island.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                const x = isSelf ? 0 : (Math.sin(seed) * 160);
+                const y = isSelf ? 0 : (Math.cos(seed) * 160);
 
                 return (
-                  <motion.button
+                  <motion.div
                     key={island.id}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    onClick={() => selectedShipId ? onSendShip(selectedShipId, x, y) : onVisit(island.id)}
-                    className="absolute group"
+                    className="absolute group flex flex-col items-center"
                     style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
                   >
-                    <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
-                      isSelf ? 'bg-blue-500 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.5)]' : 'bg-emerald-500 border-emerald-300'
-                    } group-hover:scale-110`}>
-                      <Shield size={20} className="text-white" />
+                    <button
+                      onClick={() => {
+                        if (activeShipId) {
+                          onSendShip(activeShipId, x, y);
+                          onClose();
+                        } else if (externalSelectedSiloId) {
+                          // Allow launching missiles at any island
+                          onLaunchMissile(island.id);
+                          onClose();
+                        } else if (isDiscovered || isSelf) {
+                          onVisit(island.id);
+                        }
+                      }}
+                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
+                        !isDiscovered && !isSelf 
+                          ? 'bg-gray-800 border-gray-600 opacity-50 cursor-not-allowed' 
+                          : isSelf 
+                            ? 'bg-blue-500 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.5)]' 
+                            : island.ownerId === 'system' 
+                              ? 'bg-emerald-500 border-emerald-300' 
+                              : 'bg-red-500 border-red-300'
+                      } group-hover:scale-110`}
+                    >
+                      {isDiscovered || isSelf ? (
+                        <Shield size={20} className="text-white" />
+                      ) : (
+                        <AlertTriangle size={20} className="text-white/40" />
+                      )}
+                    </button>
+                    {(isDiscovered || isSelf) && (
+                      <span className="mt-1 text-[10px] font-bold text-white bg-black/50 px-2 py-0.5 rounded whitespace-nowrap">
+                        {island.name || island.ownerName}
+                      </span>
+                    )}
+                    
+                    {/* Player Name / Island Name Label */}
+                    <div className="mt-2 flex flex-col items-center pointer-events-none">
+                      <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
+                        {isDiscovered || isSelf ? (island.name || island.ownerName) : 'Keşfedilmemiş Ada'}
+                      </span>
+                      {(isDiscovered || isSelf) && !isSelf && (
+                        <span className="text-[8px] text-white/60 mt-0.5">
+                          {island.ownerName}
+                        </span>
+                      )}
                     </div>
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 text-white text-[10px] p-2 rounded whitespace-nowrap pointer-events-none z-50">
-                      {island.name || island.ownerName + "'s Empire"}
-                    </div>
-                  </motion.button>
+
+                    {/* Settle Button for discovered NPC islands */}
+                    {isDiscovered && !isSelf && island.ownerId === 'system' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSettle(island.id);
+                        }}
+                        className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-black text-[8px] font-black px-3 py-1 rounded-full shadow-lg transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        YERLEŞ
+                      </button>
+                    )}
+                  </motion.div>
                 );
               })}
 
@@ -103,18 +159,35 @@ export function WorldMap({
                 <motion.div
                   key={ship.id}
                   className={`absolute w-6 h-6 rounded-full border flex items-center justify-center cursor-pointer transition-all ${
-                    selectedShipId === ship.id ? 'bg-yellow-500 border-yellow-300 scale-125 z-50' : 'bg-white/20 border-white/40'
+                    activeShipId === ship.id ? 'bg-yellow-500 border-yellow-300 scale-125 z-50' : 'bg-white/20 border-white/40'
                   }`}
                   style={{ left: `calc(50% + ${ship.x}px)`, top: `calc(50% + ${ship.y}px)` }}
-                  onClick={() => setSelectedShipId(ship.id === selectedShipId ? null : ship.id)}
+                  onClick={() => setLocalSelectedShipId(ship.id === activeShipId ? null : ship.id)}
                 >
                   <Navigation size={12} className="text-white rotate-45" />
                 </motion.div>
               ))}
 
+              {/* Active Missiles */}
+              {activeMissiles?.map((m) => {
+                const x = m.start[0] + (m.end[0] - m.start[0]) * m.progress;
+                const y = m.start[1] + (m.end[1] - m.start[1]) * m.progress;
+                return (
+                  <div
+                    key={m.id}
+                    className="absolute w-2 h-2 bg-red-600 rounded-full z-50"
+                    style={{
+                      left: `calc(50% + ${x}px)`,
+                      top: `calc(50% + ${y}px)`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                );
+              })}
+
               {/* Selection UI */}
               <AnimatePresence>
-                {selectedShipId && (
+                {(activeShipId || externalSelectedSiloId) && (
                   <motion.div
                     initial={{ y: 50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
@@ -122,14 +195,19 @@ export function WorldMap({
                     className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl p-4 rounded-2xl border border-yellow-500/30 text-white flex items-center gap-4"
                   >
                     <div className="flex flex-col">
-                      <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Ship Selected</span>
-                      <span className="text-[10px] text-white/60">Click on the map or an island to send this ship</span>
+                      <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">
+                        {externalSelectedSiloId ? 'Füze Hedefi Seçin' : 'Gemi Hedefi Seçin'}
+                      </span>
+                      <span className="text-[10px] text-white/60">Haritada bir ada seçerek gönderin</span>
                     </div>
                     <button 
-                      onClick={() => setSelectedShipId(null)}
+                      onClick={() => {
+                        setLocalSelectedShipId(null);
+                        onClose();
+                      }}
                       className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-[10px] font-bold"
                     >
-                      CANCEL
+                      İPTAL
                     </button>
                   </motion.div>
                 )}

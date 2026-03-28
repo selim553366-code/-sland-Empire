@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sky, Stars, Environment } from '@react-three/drei';
+import * as THREE from 'three';
 import { Island } from './Island';
 import { Island as IslandType, Creature } from '../../types';
 
@@ -8,13 +9,23 @@ interface SceneProps {
   onPlaceBuilding: (type: string, x: number, y: number) => void;
   isPlacing: string | null;
   onUpdateCreatureRole: (creatureId: string, newRole: Creature['role']) => void;
+  onSelectShip?: (shipId: string) => void;
+  onSelectBuilding?: (buildingId: string, type: string) => void;
+  onSelectTargetIsland?: (id: string) => void;
+  selectedShipId?: string | null;
+  selectedSiloId?: string | null;
+  activeMissiles?: { id: string, start: [number, number], end: [number, number], progress: number }[];
 }
 
-export function Scene({ island, onPlaceBuilding, isPlacing, onUpdateCreatureRole }: SceneProps) {
+export function Scene({ 
+  island, onPlaceBuilding, isPlacing, onUpdateCreatureRole, 
+  onSelectShip, onSelectBuilding, onSelectTargetIsland,
+  selectedShipId, selectedSiloId, activeMissiles 
+}: SceneProps) {
   return (
     <div className="w-full h-full bg-blue-900">
       <Canvas
-        shadows
+        shadows={{ type: THREE.PCFShadowMap }}
         camera={{ position: [25, 30, 25], fov: 40 }}
       >
         <Sky sunPosition={[100, 20, 100]} />
@@ -34,13 +45,13 @@ export function Scene({ island, onPlaceBuilding, isPlacing, onUpdateCreatureRole
           onPlaceBuilding={onPlaceBuilding} 
           isPlacing={isPlacing}
           onUpdateCreatureRole={onUpdateCreatureRole}
+          onSelectShip={onSelectShip}
+          onSelectBuilding={onSelectBuilding}
+          onSelectTargetIsland={onSelectTargetIsland}
+          selectedShipId={selectedShipId}
+          selectedSiloId={selectedSiloId}
+          activeMissiles={activeMissiles}
         />
-
-        {/* Water */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
-          <planeGeometry args={[1000, 1000]} />
-          <meshStandardMaterial color="#0077be" roughness={0.1} metalness={0.2} transparent opacity={0.8} />
-        </mesh>
 
         <OrbitControls 
           makeDefault 

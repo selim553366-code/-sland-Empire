@@ -28,6 +28,14 @@ export interface IslandStats {
   crisisDuration: number;
   gdp: number; // Gross Domestic Product simulation
   workStatus: WorkStatus;
+  debt?: number;
+  investments?: {
+    military: number;
+    science: number;
+    agriculture: number;
+    sports: number;
+  };
+  warProtocol?: boolean;
 }
 
 export interface Creature {
@@ -46,7 +54,7 @@ export interface Creature {
 
 export interface Building {
   id: string;
-  type: 'house' | 'farm' | 'mine' | 'storage' | 'lab' | 'oil_rig' | 'missile_silo' | 'factory' | 'university' | 'hospital' | 'bank' | 'navy_base';
+  type: 'house' | 'farm' | 'mine' | 'storage' | 'lab' | 'oil_rig' | 'missile_silo' | 'factory' | 'university' | 'hospital' | 'bank' | 'navy_base' | 'port' | 'defense_tower' | 'missile_destroyer';
   x: number;
   y: number;
   progress: number;
@@ -57,7 +65,7 @@ export interface Building {
 
 export interface Ship {
   id: string;
-  type: 'merchant' | 'explorer' | 'warship';
+  type: 'merchant' | 'explorer' | 'warship' | 'tank';
   x: number;
   y: number;
   targetX?: number;
@@ -70,6 +78,7 @@ export interface Ship {
   weaponType: 'cannon' | 'missile' | 'torpedo' | 'none';
   targetId?: string; // ID of ship or building being attacked
   targetType?: 'ship' | 'building' | 'island';
+  targetIslandId?: string; // ID of island being explored
 }
 
 export interface Tree {
@@ -89,6 +98,8 @@ export interface Island {
   name?: string;
   ownerId: string;
   ownerName: string;
+  x: number;
+  y: number;
   resources: Resources;
   stats: IslandStats;
   buildings: Building[];
